@@ -1,0 +1,133 @@
+mod baby_job;
+mod item_info;
+mod item_name;
+mod item_resource;
+mod job_identity;
+mod map_sky_data;
+mod skill_information;
+mod skill_requirements;
+mod skill_tree;
+
+use std::hash::Hash;
+
+use encoding_rs::EUC_KR;
+use hashbrown::HashMap;
+use korangar_loaders::FileLoader;
+use mlua::Lua;
+
+pub use self::baby_job::IsBabyJob;
+pub use self::item_info::ItemInfo;
+pub use self::item_name::{ItemName, ItemNameKey};
+pub use self::item_resource::{ItemResource, ItemResourceKey};
+pub use self::job_identity::JobIdentity;
+pub use self::map_sky_data::MapSkyData;
+pub use self::skill_tree::SkillTreeLayout;
+use crate::loaders::GameFileLoader;
+pub use crate::world::library::skill_information::SkillListInformation;
+pub use crate::world::library::skill_requirements::{SkillListKey, SkillListRequirements};
+
+pub struct Library {
+    job_identity_table: <JobIdentity as Table>::Storage,
+    item_info_table: <ItemInfo as Table>::Storage,
+    map_sky_data_table: <MapSkyData as Table>::Storage,
+    skill_information_table: <SkillListInformation as Table>::Storage,
+    skill_requirements_table: <SkillListRequirements as Table>::Storage,
+    skill_tree_table: <SkillTreeLayout as Table>::Storage,
+    baby_job_table: <IsBabyJob as Table>::Storage,
+}
+
+impl Library {
+    pub fn new(game_file_loader: &GameFileLoader) -> mlua::Result<Self> {
+        let job_identity_table = JobIdentity::load(game_file_loader)?;
+        let item_info_table = ItemInfo::load(game_file_loader)?;
+        let map_sky_data_table = MapSkyData::load(game_file_loader)?;
+        let skill_information_table = SkillListInformation::load(game_file_loader)?;
+        let skill_requirements_table = SkillListRequirements::load(game_file_loader)?;
+        let skill_tree_table = SkillTreeLayout::load(game_file_loader)?;
+        let baby_job_table = IsBabyJob::load(game_file_loader)?;
+
+        Ok(Self {
+            job_identity_table,
+            item_info_table,
+            map_sky_data_table,
+            skill_information_table,
+            skill_requirements_table,
+            skill_tree_table,
+            baby_job_table,
+        })
+    }
+
+    #[inline(always)]
+    pub fn get<T: Table>(&self, key: T::Key<'_>) -> &T {
+        T::get(self, key)
+    }
+}
+
+/// Trait for compacting a hash map after it is completely populated.
+trait HashMapExt {
+    /// Compact the hash map, possibly by creating a second one.
+    fn compact(self) -> Self;
+}
+
+impl<K, V> HashMapExt for HashMap<K, V>
+where
+    K: Eq + Hash,
+{
+    fn compact(self) -> Self {
+        HashMap::from_iter(self)
+    }
+}
+
+trait LuaExt: Sized {
+    fn load_from_game_files(game_file_loader: &GameFileLoader, files: &[&str]) -> mlua::Result<Self>;
+}
+
+impl LuaExt for Lua {
+    fn load_from_game_files(game_file_loader: &GameFileLoader, files: &[&str]) -> mlua::Result<Self> {
+        let state = Lua::new();
+
+        for file in files {
+            let data = game_file_loader
+                .get(file)
+                .unwrap_or_else(|_| panic!("failed to open lua file {}", file));
+
+            state.load(&data).exec()?;
+        }
+
+        Ok(state)
+    }
+}
+
+/// Trait for data that can be stored in a table and retrieved using a key.
+pub trait Table {
+    type Key<'a>;
+    type Storage;
+
+    fn load(game_file_loader: &GameFileLoader) -> mlua::Result<Self::Storage>;
+
+    fn try_get<'a, 'b>(library: &'a Library, key: Self::Key<'b>) -> Option<&'a Self>
+    where
+        Self: Sized;
+
+    fn get<'a, 'b>(library: &'a Library, key: Self::Key<'b>) -> &'a Self
+    where
+        Self: Sized;
+}
+
+fn decode_lua_string(value: mlua::String) -> String {
+    let bytes = value.as_bytes();
+    if let Ok(valid) = std::str::from_utf8(bytes.as_ref()) {
+        // Some Lua tables represent each EUC-KR byte as a Latin-1 code point.
+        // Reconstruct those bytes before decoding resource and display names.
+        if valid.chars().all(|char| (char as u32) <= 0xff) {
+            let original_bytes: Vec<u8> = valid.chars().map(|char| char as u8).collect();
+            if let Some(decoded) = EUC_KR.decode_without_bom_handling_and_without_replacement(&original_bytes) {
+                return decoded.into_owned();
+            }
+        }
+        valid.to_owned()
+    } else {
+        // Older Ragnarok Lua tables store display names as EUC-KR bytes.
+        EUC_KR.decode_without_bom_handling(bytes.as_ref()).0.into_owned()
+    }
+}

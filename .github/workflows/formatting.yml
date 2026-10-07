@@ -1,0 +1,49 @@
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches:
+      - main
+
+# Cancel previous jobs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+name: Formatting
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Formatting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add Rustfmt
+        run: rustup component add rustfmt
+
+      - name: Add problem matchers
+        run: echo "::add-matcher::.github/workflows/formatting-matchers.json"
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+  flake-nix:
+    name: flake.nix formatting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Check flake.nix
+        run: nix fmt flake.nix -- --check

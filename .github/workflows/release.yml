@@ -1,0 +1,185 @@
+on:
+  push:
+    tags:
+      # This pattern triggers for the following pattern:
+      # vMAJOR.MINOR.PATCH-YYYYMMDD
+      - 'v[0-9]+.[0-9]+.[0-9]+-20[0-9][0-9][0-1][0-9][0-3][0-9]'
+
+name: Release
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: korangar
+  SLANG_VERSION: v2026.1.1
+
+jobs:
+  build-release:
+    name: Build Release (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+            architecture: linux-x86_64
+            install-deps: sudo apt update && sudo apt install libasound2-dev nasm
+            sed-command: sed -i
+          - name: Windows
+            os: windows-2025
+            architecture: windows-x86_64
+            install-deps: choco install nasm
+            sed-command: sed -i
+          - name: MacOS
+            os: macos-14
+            architecture: macos-arm64
+            install-deps: brew install nasm
+            sed-command: sed -i ''
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: ${{ matrix.install-deps }}
+
+      - name: Cache slangc
+        id: cache-slangc
+        uses: actions/cache@v4
+        with:
+          path: ~/slangc
+          key: ${{ runner.os }}-${{ matrix.architecture }}-slangc-${{ env.SLANG_VERSION }}
+
+      - name: Download and install slangc
+        if: steps.cache-slangc.outputs.cache-hit != 'true'
+        run: |
+          if [ "${{ matrix.name }}" = "Windows" ]; then
+            SLANGC_DIR="$USERPROFILE/slangc"
+          else
+            SLANGC_DIR="$HOME/slangc"
+          fi
+
+          mkdir -p "$SLANGC_DIR"
+          cd "$SLANGC_DIR"
+
+          VERSION_NO_V=${SLANG_VERSION#v}
+
+          if [ "${{ matrix.name }}" = "Linux" ]; then
+            curl -L -o slang-linux-x86_64.tar.gz \
+              "https://github.com/shader-slang/slang/releases/download/${{ env.SLANG_VERSION }}/slang-${VERSION_NO_V}-linux-x86_64.tar.gz"
+            tar -xzf slang-linux-x86_64.tar.gz
+            rm slang-linux-x86_64.tar.gz
+            chmod +x bin/slangc bin/slangd
+          elif [ "${{ matrix.name }}" = "Windows" ]; then
+            curl -L -o slang-windows-x86_64.zip \
+              "https://github.com/shader-slang/slang/releases/download/${{ env.SLANG_VERSION }}/slang-${VERSION_NO_V}-windows-x86_64.zip"
+            unzip slang-windows-x86_64.zip
+            rm slang-windows-x86_64.zip
+            chmod +x bin/slangc.exe bin/slangd.exe
+          elif [ "${{ matrix.name }}" = "MacOS" ]; then
+            curl -L -o slang-macos-aarch64.tar.gz \
+              "https://github.com/shader-slang/slang/releases/download/${{ env.SLANG_VERSION }}/slang-${VERSION_NO_V}-macos-aarch64.tar.gz"
+            tar -xzf slang-macos-aarch64.tar.gz
+            rm slang-macos-aarch64.tar.gz
+            chmod +x bin/slangc bin/slangd
+          fi
+
+      - name: Add slangc to PATH
+        run: |
+          if [ "${{ matrix.name }}" = "Windows" ]; then
+            echo "$USERPROFILE/slangc/bin" >> $GITHUB_PATH
+          else
+            echo "$HOME/slangc/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Verify slangc installation
+        run: |
+          which slangc
+          slangc -version
+
+      - name: Get the release version from the tag
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Validate Cargo.toml version matches tag
+        run: |
+          EXPECTED_VERSION=$(echo "${{ env.VERSION }}" | sed 's/-.*$//')
+          CARGO_VERSION=$(grep '^version = ' korangar/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          if [ "$CARGO_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "Error: Cargo.toml version ($CARGO_VERSION) does not match tag version ($EXPECTED_VERSION)"
+            exit 1
+          fi
+
+      - name: Patch Cargo.toml with release version
+        run: |
+          echo "Patching korangar/Cargo.toml with version ${{ env.VERSION }}"
+          ${{ matrix.sed-command }} "s#^version = .*#version = \"${{ env.VERSION }}\"#" korangar/Cargo.toml
+
+      - name: Build binary
+        run: cargo build --release --features "unicode,debug"
+
+      - name: Prepare release archive
+        run: |
+          mkdir -p archives
+          mkdir -p staging
+          cp "target/release/${{ env.BINARY_NAME }}" staging/
+          cp -r korangar/archive staging/
+
+
+      - name: Generate artifact name
+        run: |
+          DATE=$(echo "${{ env.VERSION }}" | sed 's/.*-\([0-9]\{8\}\)$/\1/')
+          VERSION_PART=$(echo "${{ env.VERSION }}" | sed 's/-.*$//')
+          ARTIFACT_NAME="${DATE}-${{ env.BINARY_NAME }}-v${VERSION_PART}-${{ matrix.architecture }}"
+          echo "ARTIFACT_NAME=${ARTIFACT_NAME}" >> $GITHUB_ENV
+
+      - name: Create archive (Linux)
+        if: matrix.name == 'Linux'
+        run: |
+          cd staging
+          tar -czf "../archives/${{ env.ARTIFACT_NAME }}.tar.gz" *
+
+      - name: Create archive (MacOS)
+        if: matrix.name == 'MacOS'
+        run: |
+          cd staging
+          zip -r "../archives/${{ env.ARTIFACT_NAME }}.zip" .
+
+      - name: Create archive (Windows)
+        if: matrix.name == 'Windows'
+        shell: pwsh
+        run: |
+          cd staging
+          Compress-Archive -Path * -DestinationPath "..\archives\${{ env.ARTIFACT_NAME }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: archives/*
+
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    steps:
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+          merge-multiple: true
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release-artifacts/*

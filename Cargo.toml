@@ -1,0 +1,123 @@
+[workspace]
+resolver = "3"
+members = ["korangar", "ragnarok-*", "korangar-*"]
+
+[workspace.dependencies]
+arrayvec = "0.7"
+bitflags = "2"
+blake3 = { version = "1", default-features = true }
+block_compression = { version = "0.8", default-features = false }
+bumpalo = "3"
+bytemuck = "1"
+cgmath = "0.18"
+chrono = "0.4"
+clap = "4"
+cosmic-text = { version = "0.16", default-features = false }
+cpal = "0.17"
+ctrlc = "3"
+ddsfile = "0.5"
+encoding_rs = "0.8"
+etherparse = "0.19"
+fast-srgb8 = "1"
+flate2 = { version = "1", default-features = false }
+hashbrown = "0.16"
+heck = "0.5"
+image = { version = "0.25", default-features = false }
+korangar-audio = { path = "korangar-audio" }
+korangar-collision = { path = "korangar-collision" }
+korangar-container = { path = "korangar-container" }
+korangar-debug = { path = "korangar-debug" }
+korangar-interface = { path = "korangar-interface" }
+korangar-loaders = { path = "korangar-loaders" }
+korangar-networking = { path = "korangar-networking" }
+korangar-video = { path = "korangar-video" }
+libc = "0.2"
+lunify = "1"
+mlua = "0.11"
+num = "0.4"
+option-ext = "0.2"
+pcap = "2"
+pollster = "0.4"
+proc-macro2 = "1"
+quick-xml = "0.38"
+quote = "1"
+ragnarok-bytes = { path = "ragnarok-bytes" }
+ragnarok-formats = { path = "ragnarok-formats" }
+ragnarok-macros = { path = "ragnarok-macros" }
+ragnarok-packets = { path = "ragnarok-packets" }
+rand_aes = { version = "0.6", default-features = false }
+rav1d = { version = "1", git = "https://github.com/memorysafety/rav1d.git", rev = "c8019327ff0aa4c097475fa5f679561ea3abd983" }
+rayon = "1"
+reqwest = "0.13"
+resampler = "0.4"
+ron = "0.12"
+rtrb = "0.3"
+rust-state = { git = "https://github.com/vE5li/rust-state" }
+symphonia = { version = "0.5", default-features = false }
+send_wrapper = "0.6"
+serde = "1"
+sevenz-rust2 = { version = "0.20", default-features = false }
+smallvec = "1"
+spin_sleep = "1"
+syn = "2"
+sys-locale = "0.3"
+tokio = { version = "1", default-features = false }
+walkdir = "2"
+wgpu = "28"
+winit = "0.30"
+
+[profile.release]
+lto = "thin"
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev.package.rav1d]
+opt-level = 3
+debug-assertions = false
+
+[profile.dev.package.wgpu-core]
+opt-level = 3
+debug-assertions = false
+
+[profile.dev.package.korangar]
+opt-level = 0
+
+[profile.dev.package.korangar-audio]
+opt-level = 3
+
+[profile.dev.package.korangar-collision]
+opt-level = 3
+
+[profile.dev.package.korangar-container]
+opt-level = 3
+
+[profile.dev.package.korangar-debug]
+opt-level = 3
+
+[profile.dev.package.korangar-interface]
+opt-level = 3
+
+[profile.dev.package.korangar-networking]
+opt-level = 3
+
+[profile.dev.package.korangar-loaders]
+opt-level = 3
+
+[profile.dev.package.korangar-video]
+opt-level = 3
+
+[profile.dev.package.ragnarok-bytes]
+opt-level = 3
+
+[profile.dev.package.ragnarok-formats]
+opt-level = 3
+
+[profile.dev.package.ragnarok-macros]
+opt-level = 3
+
+[profile.dev.package.ragnarok-packets]
+opt-level = 3
