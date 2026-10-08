@@ -21,3 +21,10 @@ This file records the **initial FreokRO `dev` snapshot before any integration**.
 - **NOT VALIDATED:** visual inspection of Skin → Classic / Original selection, card icons, all item types, persistence after restart, and the rest of the interface in a real game session after this build. The tool's browser security policy blocked a local HTML preview.
 - **NOT VALIDATED:** Episode 19 and all auction paths after the skin change. The user reported that server-side escrow passed in the client after its SQL migration, but this build has not independently repeated that test.
 - **PENDING:** compare the actual game UI with the Auction HUD, adjust any components outside the shared theme, and test item descriptions and skin switching.
+
+## October 8, 2026 — Character Overview shortcut
+
+- **IMPLEMENTED:** Alt+C toggles Character Overview while a player is loaded. Both Alt keys work. Reopening constructs the window from the current player state, and Alt+C is reserved from custom skill bindings.
+- **VALIDATED:** the focused keyboard test passed with `unicode` and with `unicode,debug`; the `unicode,debug` release build passed. The user confirmed in the live local client that Alt+C closed and reopened Character Overview.
+- **LOCAL BUILD:** the installed `korangar.exe` is the new `dev` build, SHA256 `F41853278450443D6C3B4D31BCAB1A859360B7A2E101A029A232669A7589729C`. The previous executable was retained in the local installation's `archive` directory.
+- **SEPARATE ISSUE:** relogging corrected a previously stale level display. The cause of missed live stat updates has not been established by this shortcut test.

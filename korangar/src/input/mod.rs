@@ -248,7 +248,7 @@ impl InputSystem {
                     && !(name == "Escape" || (!control_down && !shift_down && !alt_down
                         && (fixed_function_keys.iter().any(|key| *key as usize == index)
                             || fixed_digit_keys.iter().any(|key| *key as usize == index))))
-                    && !(alt_down && matches!(name, "KeyE" | "KeyS" | "KeyA" | "KeyZ" | "KeyQ"))
+                    && !(alt_down && matches!(name, "KeyC" | "KeyE" | "KeyS" | "KeyA" | "KeyZ" | "KeyQ"))
                     && !(control_down && matches!(name, "KeyS" | "KeyI" | "KeyG" | "KeyA" | "KeyH" | "KeyQ" | "KeyM" | "KeyC" | "KeyR" | "KeyP" | "KeyO" | "KeyN"))
                 {
                     let binding = format!("{}{}{}{}", if control_down { "Ctrl+" } else { "" },
@@ -264,6 +264,11 @@ impl InputSystem {
             let bare_function_key = !control_down && !shift_down && !alt_down
                 && fixed_function_keys.iter().any(|key| *key as usize == index);
             if text_input_has_focus && !bare_function_key {
+                continue;
+            }
+            // Alt+C belongs to the character overview, even if an older hotbar
+            // configuration still contains that binding.
+            if alt_down && !control_down && !shift_down && name == "KeyC" {
                 continue;
             }
             let binding = format!("{}{}{}{}", if control_down { "Ctrl+" } else { "" },
@@ -294,8 +299,13 @@ impl InputSystem {
         #[cfg(feature = "debug")] process_mouse: bool,
         #[cfg(feature = "debug")] use_debug_camera: bool,
     ) {
-        let alt_down = self.get_key(KeyCode::AltLeft).down();
+        let alt_down = self.get_key(KeyCode::AltLeft).down() || self.get_key(KeyCode::AltRight).down();
         let control_down = self.get_key(KeyCode::ControlLeft).down();
+        let shift_down = self.get_key(KeyCode::ShiftLeft).down() || self.get_key(KeyCode::ShiftRight).down();
+
+        if alt_down && !control_down && !shift_down && self.get_key(KeyCode::KeyC).pressed() {
+            events.push(InputEvent::ToggleCharacterOverviewWindow);
+        }
 
         if alt_down && self.get_key(KeyCode::KeyE).pressed() {
             events.push(InputEvent::ToggleInventoryWindow);
@@ -414,5 +424,61 @@ impl InputSystem {
         }
 
         self.input_buffer.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alt_c_toggles_character_overview_once_per_press() {
+        #[cfg(feature = "debug")]
+        let _frame = {
+            use std::sync::{Mutex, OnceLock};
+
+            use korangar_debug::profiling::Profiler;
+
+            static PROFILER: OnceLock<Mutex<Profiler>> = OnceLock::new();
+            let profiler = PROFILER.get_or_init(|| Mutex::new(Profiler::default()));
+            Profiler::set_active(profiler);
+            profiler.lock().unwrap().start_frame()
+        };
+
+        for alt_key in [KeyCode::AltLeft, KeyCode::AltRight] {
+            let mut input = InputSystem::new(Arc::new(AtomicU64::new(0)));
+            input.update_keyboard(alt_key, ElementState::Pressed);
+            input.update_keyboard(KeyCode::KeyC, ElementState::Pressed);
+            input.update_delta(ClientTick(1));
+
+            let mut events = Vec::new();
+            input.handle_keyboard_input(
+                &mut events,
+                #[cfg(feature = "debug")]
+                false,
+                #[cfg(feature = "debug")]
+                false,
+            );
+            assert!(
+                events
+                    .iter()
+                    .any(|event| matches!(event, InputEvent::ToggleCharacterOverviewWindow))
+            );
+
+            events.clear();
+            input.update_delta(ClientTick(2));
+            input.handle_keyboard_input(
+                &mut events,
+                #[cfg(feature = "debug")]
+                false,
+                #[cfg(feature = "debug")]
+                false,
+            );
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| matches!(event, InputEvent::ToggleCharacterOverviewWindow))
+            );
+        }
     }
 }

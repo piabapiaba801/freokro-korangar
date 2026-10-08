@@ -2067,6 +2067,20 @@ impl Client {
                         }
                     }
                 }
+                InputEvent::ToggleCharacterOverviewWindow => {
+                    if self.client_state.try_follow(this_player()).is_some() {
+                        match self.interface.is_window_with_class_open(WindowClass::CharacterOverview) {
+                            true => self.interface.close_window_with_class(WindowClass::CharacterOverview),
+                            false => self.interface.open_window(CharacterOverviewWindow::new(
+                                client_state().player_name(),
+                                this_player().manually_asserted().base_level(),
+                                this_player().manually_asserted().job_level(),
+                                this_player(),
+                                self.library.clone(),
+                            )),
+                        }
+                    }
+                }
                 InputEvent::ToggleInventoryWindow => {
                     if self.client_state.try_follow(this_entity()).is_some() {
                         match self.interface.is_window_with_class_open(WindowClass::Inventory) {

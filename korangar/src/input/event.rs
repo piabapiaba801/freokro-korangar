@@ -60,6 +60,8 @@ pub enum InputEvent {
     ResetCameraRotation,
     /// Open or close the menu window. Only works while playing.
     ToggleMenuWindow,
+    /// Open or close the character overview window. Only works while playing.
+    ToggleCharacterOverviewWindow,
     /// Open or close the inventory window. Only works while playing.
     ToggleInventoryWindow,
     /// Open or close the equipment window. Only works while playing.
